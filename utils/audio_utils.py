@@ -91,14 +91,18 @@ def extract_audio_features(audio_path, n_mfcc=40, sample_rate=22050):
         # Return zeros if audio is empty/silent
         return np.zeros(n_mfcc, dtype=np.float32)
     
-    # Extract MFCCs
+    # Extract MFCCs with cepstral liftering (L=22).
+    # Liftering multiplies coefficient k by (1 + L/2 * sin(pi*k/L)), boosting
+    # higher-order coefficients 5-12× so all 40 values have comparable magnitude.
+    # The audio model was trained with this preprocessing; without it, most
+    # activations collapse to zero and the model gives near-uniform predictions.
     # Shape: (n_mfcc, time_frames)
-    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
-    
+    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc, lifter=22)
+
     # Average across time to get fixed-size representation
     # Shape: (n_mfcc,)
     mfcc_mean = np.mean(mfccs, axis=1).astype(np.float32)
-    
+
     return mfcc_mean
 
 
