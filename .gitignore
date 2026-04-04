@@ -1,35 +1,9 @@
-# Virtual environment
+data/
 venv/
-env/
-.venv/
-
-# Python cache
+checkpoint.pth
+*.wav
+temp_*
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Model weights (download separately)
-*.pth
-
-# Temporary files
-temp.wav
-*.tmp
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
-.idea/
-*.swp
-*.swo
-
-# Streamlit
-.streamlit/
-
-# Logs
-*.log
-
-# Jupyter
-.ipynb_checkpoints/
+video_model.pth
+audio_model.pth
+fusion_model.pth
