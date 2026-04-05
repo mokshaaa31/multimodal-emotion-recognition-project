@@ -587,14 +587,29 @@ class RAVDESSDataset(Dataset):
             # Get middle frame
             frame = frames[len(frames) // 2]
         
+        # Detect and crop face
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(30, 30))
+        if len(faces) > 0:
+            x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+            pad = int(0.3 * w)
+            x1, y1 = max(0, x - pad), max(0, y - pad)
+            x2, y2 = min(frame.shape[1], x + w + pad), min(frame.shape[0], y + h + pad)
+            frame = frame[y1:y2, x1:x2]
+        
         frame = cv2.resize(frame, (config.IMG_SIZE, config.IMG_SIZE))
         
         # Apply augmentation
         if self.augment:
             frame = VideoAugmentation.augment(frame)
         
-        # Normalize
+        # Normalize with ImageNet stats
         frame = frame.astype(np.float32) / 255.0
+        frame = frame[:, :, ::-1].copy()  # BGR to RGB
+        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        frame = (frame - mean) / std
         frame = np.transpose(frame, (2, 0, 1))  # HWC → CHW
         frame_tensor = torch.tensor(frame)
         

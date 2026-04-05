@@ -72,6 +72,38 @@ video_model.eval()
 audio_model.eval()
 fusion_model.eval()
 
+# ImageNet normalization (must match training)
+IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
+def preprocess_frame(frame):
+    """Resize, BGR to RGB, ImageNet normalize"""
+    frame = cv2.resize(frame, (config.IMG_SIZE, config.IMG_SIZE))
+    frame = frame.astype(np.float32) / 255.0
+    frame = frame[:, :, ::-1].copy()
+    frame = (frame - IMAGENET_MEAN) / IMAGENET_STD
+    frame = np.transpose(frame, (2, 0, 1))
+    return torch.tensor(frame).unsqueeze(0).to(device)
+# Load face detector
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+def crop_face(frame):
+    """Detect and crop face from frame"""
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(60, 60))
+    
+    if len(faces) > 0:
+        # Get largest face
+        x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+        # Add padding
+        pad = int(0.3 * w)
+        x1 = max(0, x - pad)
+        y1 = max(0, y - pad)
+        x2 = min(frame.shape[1], x + w + pad)
+        y2 = min(frame.shape[0], y + h + pad)
+        return frame[y1:y2, x1:x2]
+    
+    return frame  # Return original if no face found
 
 # ==================== ANALYSIS FUNCTIONS ====================
 
@@ -91,10 +123,8 @@ def analyze_multimodal(video_path):
 
         # Use middle frame
         frame = frames[len(frames) // 2]
-        frame_resized = cv2.resize(frame, (config.IMG_SIZE, config.IMG_SIZE))
-        frame_norm = frame_resized.astype(np.float32) / 255.0
-        frame_tensor = torch.tensor(np.transpose(frame_norm, (2, 0, 1))).unsqueeze(0).to(device)
-
+        frame = crop_face(frame)
+        frame_tensor = preprocess_frame(frame)
         with torch.no_grad():
             video_feat = video_model(frame_tensor)
 
@@ -162,20 +192,20 @@ def analyze_multimodal(video_path):
 
 
 def analyze_live_frame(image):
-    """Analyze single frame from camera"""
+    """Analyze single frame from camera with face detection"""
     if image is None:
         return None, create_waiting_result()
 
     try:
-        frame = cv2.resize(image, (config.IMG_SIZE, config.IMG_SIZE))
-        frame = frame.astype(np.float32) / 255.0
-        frame = np.transpose(frame, (2, 0, 1))
-        frame_tensor = torch.tensor(frame).unsqueeze(0).to(device)
+        # Crop to face first
+        face = crop_face(image)
+        
+        frame_tensor = preprocess_frame(face)
 
         with torch.no_grad():
             video_feat = video_model(frame_tensor)
-            audio_feat = torch.zeros(1, config.EMBED_DIM).to(device)
-            output = fusion_model(video_feat, audio_feat)
+            # Use the video features AS audio too (better than zeros)
+            output = fusion_model(video_feat, video_feat)
 
         probs = torch.softmax(output, dim=1).cpu().numpy()[0]
         pred = int(np.argmax(probs))
