@@ -6,4 +6,3 @@ temp_*
 __pycache__/
 video_model.pth
 audio_model.pth
-fusion_model.pth
